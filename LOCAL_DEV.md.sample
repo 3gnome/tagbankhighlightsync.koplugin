@@ -1,0 +1,188 @@
+# TagBankHighlightSync — local dev context (Cursor / AI)
+
+Copy this file to **`LOCAL_DEV.md`** (gitignored) and edit machine-specific paths:
+
+```bash
+cp LOCAL_DEV.md.sample LOCAL_DEV.md
+```
+
+**Cursor:** attach `@LOCAL_DEV.md` at session start, or rely on `.cursor/rules/tagbankhighlightsync-dev.mdc`
+**Cursor (v3+ / Glass):** `.code-workspace` files require the **Editor** window first — **Ctrl+Shift+N**
+(or **File → Open Editor Window**), then **Ctrl+Shift+P** → **Open Workspace from File...** →
+`C:\Users\small\koreader-dev.code-workspace`. CLI: `cursor C:\Users\small\koreader-dev.code-workspace --classic`.
+Both plugin repos live in **`C:\Users\small\`**.
+
+**Goals:** personal goals and current focus live in **AnkiKOAi `LOCAL_DEV.md`** only — AI reads that first.
+
+---
+
+## Ecosystem (3-folder workspace)
+
+| Folder | Role |
+|--------|------|
+| **AnkiKOAi.koplugin** | Highlights → Wiki / Vocab / Mem cards → AnkiConnect → desktop Anki |
+| **tagbankhighlightsync.koplugin** (this repo) | Tag bank, JSON sync via cloud, Markdown quote library (`C:\Users\small\`) |
+| **KOReader Highlights** (Desktop) | PC WebDAV root (`webdav.exe` :8181) + Obsidian vault for generated `library/` |
+
+**Workflow:** Read on KOReader → AnkiKOAi sends cards to Anki; TagBankHighlightSync tags highlights,
+syncs `*.sdr.json`, and exports quote Markdown into `KOReader Highlights/library/`. JSON on WebDAV
+is the source of truth; Markdown is derived on **Sync now**.
+
+**Dev hub:** `bash dev-start.sh --emulator alice.epub` from **AnkiKOAi** syncs both plugins and
+launches once. This repo’s `dev-start.sh` delegates there.
+
+**Two cloud concepts (do not conflate):**
+
+- **Tools → Cloud storage** — WebDAV account list (`settings/cloudstorage.lua`)
+- **Tag Bank Highlight Sync → Cloud folder** — sync target path (`sync_server` in plugin settings)
+
+Emulator one-time (this repo): `setup-emulator-cloud.sh` + `configure-emulator-webdav.sh`.
+
+**AI read order:** (1) AnkiKOAi `LOCAL_DEV.md` goals, (2) this file, (3) AnkiKOAi sample when task
+touches Anki cards or shared dev-start.
+
+---
+
+## What this repo is
+
+KOReader Lua plugin (`tagbankhighlightsync.koplugin/`). Tags highlights, syncs and merges annotations
+via Cloud storage+ (WebDAV, Dropbox, etc.). All plugin logic is `*.lua`
+at the repo root; unit tests live under `spec/`.
+
+---
+
+## Module map (main `.lua` files)
+
+| File | Role |
+|------|------|
+| `main.lua` | Entry, menu, sync triggers, document reload |
+| `settings_menu.lua` | Settings UI (When to sync, What to sync, Cloud file name, Advanced) |
+| `merge.lua` | Merge local and remote annotation JSON |
+| `export.lua` | Markdown, TXT, CSV export helpers |
+| `output_settings.lua` | Output/sync defaults and filename/filter helpers |
+| `batch_sync.lua` | File-manager batch upload |
+| `insert_menu.lua` | Insert Tag Bank Highlight Sync into Tools menu order |
+| `insert_menu_cloudstorage.lua` | Ensure Cloud storage in Tools on dev emulator |
+| `tags.lua` | Tag normalize/merge helpers |
+| `tag_bank.lua` | Hierarchical tag bank tree |
+| `tag_menu.lua` | Tag highlight + manage bank menus |
+| `tag_dialog.lua` | Tag & sync hub (highlight dialog) |
+| `library_export.lua` | Markdown quote library (master + per-book) |
+
+---
+
+## Starting KOReader (development)
+
+Full sync/launch tables and env vars: **AnkiKOAi `LOCAL_DEV.md.sample` § Starting KOReader**.
+
+From **this repo** in WSL:
+
+```bash
+# One-time: Cloud storage plugin for v2026.03 dev emulator (must pass load test)
+bash setup-emulator-cloud.sh
+bash configure-emulator-webdav.sh
+
+# Sync both plugins + launch (delegates to AnkiKOAi dev-start.sh)
+bash dev-start.sh --emulator /mnt/c/Users/small/AnkiKOAi.koplugin/alice.epub
+
+# Sync both without opening KOReader:
+bash dev-start.sh --sync-only
+```
+
+**Machine-specific (edit in your `LOCAL_DEV.md`):**
+
+- WSL distro: `Ubuntu (WSL)`
+- Repo path: `/mnt/c/Users/small/tagbankhighlightsync.koplugin`
+- Test book: `/mnt/c/Users/small/AnkiKOAi.koplugin/alice.epub`
+- Emulator data: `~/koreader-dev/emulator/usr/lib/koreader/`
+
+After launch: **Tools → More tools → Plugin management** — enable **Cloud storage** and
+**TagBankHighlightSync**. **Cloud folder** (Tag Bank Highlight Sync menu) is a separate step from **Tools → Cloud Storage** (WebDAV account list).
+
+**Cloud folder dead tap (emulator):** grep terminal for `cloudstorage:onShowCloudStorageList`, `buttonselector not found`, or `stringRFC1123ToSeconds`. Re-run `bash setup-emulator-cloud.sh` until it prints `Load OK: cloudstorage plugin + buttonselector`. HighlightSync now shows an on-screen error if Cloud storage fails to open.
+
+---
+
+## Logging
+
+KOReader dev emulator logs to **stdout** (terminal), not always to a file.
+
+| Log | Typical path |
+|-----|----------------|
+| Captured session | `~/koreader-emulator.log` (via `tee` above) |
+| Emulator data dir | `~/koreader-dev/emulator/usr/lib/koreader/` |
+
+**Useful grep after a crash:**
+
+```bash
+grep -E 'stack traceback|ERROR |WARN |TagBankHighlightSync|tag_bank_highlight_sync|cloudstorage|buttonselector' ~/koreader-emulator.log
+```
+
+---
+
+## Sanity check (optional)
+
+Run from **this repo** (`tagbankhighlightsync.koplugin`), not `AnkiKOAi.koplugin`:
+
+```bash
+cd /mnt/c/Users/small/tagbankhighlightsync.koplugin
+bash _check.sh   # parse-check all .lua with emulator luajit
+~/koreader-dev/emulator/usr/lib/koreader/luajit spec/run_tests.lua   # unit tests
+```
+
+**Dev-only:** regenerate `library/` on WebDAV from existing JSON (no emulator):
+
+```bash
+~/koreader-dev/emulator/usr/lib/koreader/luajit \
+  /mnt/c/Users/small/tagbankhighlightsync.koplugin/spec/validate_webdav_library.lua \
+  "/mnt/c/Users/small/Desktop/KOReader Highlights/alice.sdr.json" \
+  "/mnt/c/Users/small/Desktop/KOReader Highlights/library"
+```
+
+---
+
+## Quote library validation (JSON + Markdown)
+
+**Phase A — KOReader / WebDAV**
+
+1. Settings → **Quote library** → **Turn on quote library (Markdown)**
+2. Tag a highlight (e.g. **Buddhism** → **aversion**) → **Tag & sync → Sync now**
+3. Confirm on WebDAV (`KOReader Highlights/` or your cloud folder):
+   - `alice.sdr.json` — `highlight_sync_tags` on annotations
+   - `library/books/alice.sdr.md` (or `{sidecar}.md`) — per-book highlights
+   - `library/master-quotes.md` — tagged quotes with callouts and inline metadata
+   - `library/tags/buddhism.md` and `library/tags/aversion.md` — tag index files
+   - `library/README.md` and `library/templates/Writing Dashboard.md` — writer entry points
+4. **Sync now** twice unchanged → **Already synced** toast
+
+**Phase A — PC apps (Obsidian writer workflow)**
+
+| App | What to open | How to browse |
+|-----|--------------|---------------|
+| **Obsidian** (free) | `library/` folder as vault | `templates/Writing Dashboard.md` (Dataview); tag pane `#buddhism`; inline fields `book::`, `author::` |
+| **Apple Notes** (Tahoe+) | Import `library/books/{book}.md` | File → Import Markdown; per-book literature notes only |
+
+Obsidian Sync/Publish are optional — WebDAV is your sync layer for KOReader.
+
+---
+
+## Regression checklist (tag bank + sync dedup)
+
+1. `bash _check.sh` — all `.lua` parse OK
+2. `~/koreader-dev/emulator/usr/lib/koreader/luajit spec/run_tests.lua` — unit tests pass
+3. **Sync Highlights** — `*.sdr.json` updates on WebDAV
+4. **Tag & sync → Tag highlight** — `▶` folders with tag counts; checkmarks on right; **← Back** returns to hub; **Applied:** updates live
+5. **Tag highlight menu** — tap tag/folder to apply; hold for Rename/Move/Delete; **Add folder…** / **Add tag…** (Add to bank uses current folder path). **Advanced: manage structure…** in Settings → Categories if needed
+6. Drill **▶ Buddhism** — category tag applied; toggle **aversion** → both in JSON
+7. **Quote library** ON → **Sync now** → scholarly headings + callouts in `library/master-quotes.md`; no `%%` sync markers
+8. **Sync now** twice unchanged → **Already synced**
+
+Flat tag banks auto-migrate to hierarchical layout on plugin load (`tag_bank_layout_version` 3 adds Manuscript/Themes folders). To reset entirely, delete TagBankHighlightSync settings in KOReader and restart.
+
+**Kindle:** copy plugin folder to `koreader/plugins/`; use PC **LAN IP** for WebDAV (`http://192.168.x.x:8181/`), not WSL gateway IP.
+
+---
+
+## Do not commit
+
+- `LOCAL_DEV.md`, `*.log`, `koreader.log`, `alice.epub`, `*.sdr/`

@@ -1,0 +1,28 @@
+---
+description: Load TagBankHighlightSync local dev context (sync, cloud, quote library)
+alwaysApply: true
+---
+
+# TagBankHighlightSync session bootstrap
+
+At the **start of each session** (before large edits or debugging), read:
+
+0. **`koreader-dev/WORKSPACE_SESSION.md`** — where we left off (rolling catch-up)
+1. **AnkiKOAi `LOCAL_DEV.md`** for goals (default: `/mnt/c/Users/small/AnkiKOAi.koplugin/LOCAL_DEV.md`), else AnkiKOAi sample
+2. **This repo’s `LOCAL_DEV.md`** if it exists, else **`LOCAL_DEV.md.sample`**
+
+The user may attach **`@LOCAL_DEV.md`** from either repo.
+
+At **end of significant work**, update **`koreader-dev/WORKSPACE_SESSION.md`**.
+
+**Workspace:** `C:\Users\small\koreader-dev.code-workspace` — open in **Editor** (**Ctrl+Shift+N**), then **Open Workspace from File...** (Glass/Agents cannot load `.code-workspace`).
+
+## Quick reminders
+
+- Plugin code: `*.lua` at repo root. Sync/merge: `merge.lua`. Quote library: `library_export.lua`.
+- **Cloud folder** (sync target) ≠ **Tools → Cloud storage** (WebDAV account). Emulator: `setup-emulator-cloud.sh` + `configure-emulator-webdav.sh`.
+- Cloud folder picker: `openCloudFolderPicker` in `main.lua` — direct call, `pcall`, on-screen error on failure.
+- Dev launch: `bash dev-start.sh --emulator …` (delegates to AnkiKOAi). One launch per WSL session.
+- Sanity: `bash _check.sh` and `~/koreader-dev/emulator/usr/lib/koreader/luajit spec/run_tests.lua` from **this repo**.
+- KOReader Highlights folder = WebDAV root + generated `library/` for Obsidian validation.
+- Never commit `LOCAL_DEV.md`, API keys, or `*_settings.json`.
