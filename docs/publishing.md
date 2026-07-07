@@ -21,21 +21,21 @@ KOReader plugin: tag highlights, sync annotations via WebDAV/cloud, export Obsid
 
 ```bash
 # First time: gh auth login
-bash release.sh 0.9.0 --notes-file docs/release-notes-v0.9.0.md
+bash release.sh --notes-file docs/release-notes-v0.9.1.md
 ```
 
-Produces `../tagbankhighlightsync-v0.9.0.zip` and a GitHub Release.
+Produces `../tagbankhighlightsync-vX.Y.Z.zip` and a GitHub Release.
 
 ## First-time GitHub repo
 
 ```bash
 git init
 git add .
-git commit -m "Initial release: TagBankHighlightSync v0.9.0 beta"
+git commit -m "Initial release: TagBankHighlightSync"
 gh repo create 3gnome/tagbankhighlightsync.koplugin --public \
   --description "KOReader: tag highlights, cloud sync, Obsidian quote library" \
   --source=. --remote=origin --push
-bash release.sh 0.9.0 --notes-file docs/release-notes-v0.9.0.md
+bash release.sh --notes-file docs/release-notes-v0.9.1.md
 ```
 
 ## Cross-links

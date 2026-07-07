@@ -1,5 +1,6 @@
 # Local Cursor / machine-specific dev context (see LOCAL_DEV.md.sample)
 LOCAL_DEV.md
+.cursor/
 
 # Dev / emulator logs
 koreader.log

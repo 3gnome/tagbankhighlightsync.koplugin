@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.9.0 (2026-07-07) — first public beta
+## v0.9.1 (2026-07-07) — first public beta
 
 ### Highlights
 - Hierarchical **tag bank** with folders, parent tags, and hold-to-edit (rename, move, delete)

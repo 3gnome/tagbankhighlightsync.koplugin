@@ -6,7 +6,7 @@
 #   bash release.sh 0.9.0                 # release a specific version
 #   bash release.sh --publish-only        # publish zip for current _meta.lua version
 #   bash release.sh --dry-run
-#   bash release.sh --notes-file docs/release-notes-v0.9.0.md
+#   bash release.sh --notes-file docs/release-notes-v0.9.1.md
 
 set -euo pipefail
 
