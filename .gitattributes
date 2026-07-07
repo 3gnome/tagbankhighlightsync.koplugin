@@ -1,1 +1,3 @@
 *.sh text eol=lf
+.cursor export-ignore
+LOCAL_DEV.md export-ignore

@@ -9,7 +9,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEV_LIB="${ANKIKOOAI_SRC:-/mnt/c/Users/small/AnkiKOAi.koplugin}/dev-lib.sh"
+DEV_LIB="${ANKIKOOAI_SRC:-$(dirname "$SCRIPT_DIR")/AnkiKOAi.koplugin}/dev-lib.sh"
 if [ ! -f "$DEV_LIB" ]; then
     echo "ERROR: dev-lib.sh not found at: $DEV_LIB" >&2
     echo "Set ANKIKOOAI_SRC to the AnkiKOAi plugin directory." >&2
@@ -42,7 +42,7 @@ OPTIONS
 
 EXAMPLES
   bash start.sh --sync-only
-  bash dev-start.sh --emulator /mnt/c/Users/small/AnkiKOAi.koplugin/alice.epub
+  bash dev-start.sh --emulator /path/to/AnkiKOAi.koplugin/alice.epub
 EOF
 }
 

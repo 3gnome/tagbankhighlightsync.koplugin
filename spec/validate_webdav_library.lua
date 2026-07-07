@@ -1,7 +1,7 @@
 #!/usr/bin/env luajit
 -- Dev validation: build library/ Markdown from a sidecar JSON (Phase A checklist).
 -- Usage (from anywhere in WSL):
---   luajit /mnt/c/Users/small/tagbankhighlightsync.koplugin/spec/validate_webdav_library.lua \
+--   luajit spec/validate_webdav_library.lua \
 --     [path/to/alice.sdr.json] [output/library/dir]
 
 local script_path = arg[0]:match("(.*/)") or "./"
@@ -30,8 +30,12 @@ package.loaded["gettext"] = setmetatable({}, {
 })
 _G._ = package.loaded["gettext"]
 
-local json_path = arg[1] or "/mnt/c/Users/small/Desktop/KOReader Highlights/alice.sdr.json"
-local out_root = arg[2] or "/mnt/c/Users/small/Desktop/KOReader Highlights/library"
+local json_path = arg[1]
+local out_root = arg[2]
+if not json_path or not out_root then
+    io.stderr:write("Usage: luajit spec/validate_webdav_library.lua <alice.sdr.json> <library/dir>\n")
+    os.exit(1)
+end
 local sidecar_name = json_path:match("([^/]+)%.json$") or "alice.sdr"
 local filename = sidecar_name
 

@@ -8,14 +8,14 @@ alwaysApply: true
 At the **start of each session** (before large edits or debugging), read:
 
 0. **`koreader-dev/WORKSPACE_SESSION.md`** — where we left off (rolling catch-up)
-1. **AnkiKOAi `LOCAL_DEV.md`** for goals (default: `/mnt/c/Users/small/AnkiKOAi.koplugin/LOCAL_DEV.md`), else AnkiKOAi sample
+1. **AnkiKOAi `LOCAL_DEV.md`** for goals (sibling repo `AnkiKOAi.koplugin/LOCAL_DEV.md`), else AnkiKOAi sample
 2. **This repo’s `LOCAL_DEV.md`** if it exists, else **`LOCAL_DEV.md.sample`**
 
 The user may attach **`@LOCAL_DEV.md`** from either repo.
 
 At **end of significant work**, update **`koreader-dev/WORKSPACE_SESSION.md`**.
 
-**Workspace:** `C:\Users\small\koreader-dev.code-workspace` — open in **Editor** (**Ctrl+Shift+N**), then **Open Workspace from File...** (Glass/Agents cannot load `.code-workspace`).
+**Workspace:** Open a multi-root `koreader-dev.code-workspace` in **Editor** (**Ctrl+Shift+N**), then **Open Workspace from File...** (Glass/Agents cannot load `.code-workspace`). Sibling plugin repos in one parent folder.
 
 ## Quick reminders
 

@@ -3,7 +3,7 @@
 set -euo pipefail
 KOREADER="${KOREADER_DIR:-$HOME/koreader-dev/emulator/usr/lib/koreader}"
 FILE="$KOREADER/settings.reader.lua"
-URL="${WEBDAV_URL:-http://172.22.144.1:8181/}"
+URL="${WEBDAV_URL:-http://127.0.0.1:8181/}"
 NAME="${WEBDAV_NAME:-Local WebDAV}"
 
 if grep -q 'sync_server' "$FILE" 2>/dev/null; then

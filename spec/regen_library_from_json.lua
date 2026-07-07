@@ -29,8 +29,13 @@ package.loaded["gettext"] = setmetatable({}, {
 })
 _G._ = package.loaded["gettext"]
 
-local webdav_root = arg[1] or "/mnt/c/Users/small/Desktop/KOReader Highlights"
-local out_root = arg[2] or (webdav_root .. "/library")
+local webdav_root = arg[1]
+local out_root = arg[2]
+if not webdav_root then
+    io.stderr:write("Usage: luajit spec/regen_library_from_json.lua <webdav-root> [library/dir]\n")
+    os.exit(1)
+end
+out_root = out_root or (webdav_root .. "/library")
 
 local _test_data_dir = os.tmpname():gsub("%..*", "") .. "_hs_regen"
 package.loaded["datastorage"] = {

@@ -19,7 +19,7 @@ SETTINGS_DIR="$KOREADER/settings"
 READER_SETTINGS="$KOREADER/settings.reader.lua"
 CLOUD_SETTINGS="$SETTINGS_DIR/cloudstorage.lua"
 WEBDAV_NAME="${WEBDAV_NAME:-Local WebDAV}"
-HIGHLIGHTS_WIN="/mnt/c/Users/small/Desktop/KOReader Highlights"
+WEBDAV_ROOT="${WEBDAV_ROOT:-}"
 
 probe_webdav() {
     local url="$1"
@@ -41,9 +41,6 @@ detect_webdav_url() {
             candidates+=("http://${host}:8181/")
         fi
     fi
-    candidates+=(
-        "http://192.168.4.123:8181/"
-    )
     local url
     for url in "${candidates[@]}"; do
         code="$(probe_webdav "$url")"
@@ -54,7 +51,10 @@ detect_webdav_url() {
         fi
     done
     echo "ERROR: WebDAV not reachable on port 8181 from this environment." >&2
-    echo "       On Windows run: cd \"$HIGHLIGHTS_WIN\" && .\\setup-webdav.ps1" >&2
+    echo "       On Windows start WebDAV in your WEBDAV_ROOT folder, then retry." >&2
+    if [ -n "$WEBDAV_ROOT" ]; then
+        echo "       WEBDAV_ROOT=$WEBDAV_ROOT" >&2
+    fi
     echo "       Then retry, or set WEBDAV_URL explicitly." >&2
     exit 1
 }
@@ -137,7 +137,7 @@ main() {
     echo "  TagBankHighlightSync cloud folder: / (root)" >&2
     echo "  Plugins: cloudstorage + tagbankhighlightsync enabled" >&2
     echo "" >&2
-    echo "Launch: bash dev-start.sh --emulator /mnt/c/Users/small/AnkiKOAi.koplugin/alice.epub" >&2
+    echo "Launch: bash dev-start.sh --emulator /path/to/alice.epub" >&2
 }
 
 main "$@"

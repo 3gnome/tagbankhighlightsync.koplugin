@@ -9,8 +9,8 @@ cp LOCAL_DEV.md.sample LOCAL_DEV.md
 **Cursor:** attach `@LOCAL_DEV.md` at session start, or rely on `.cursor/rules/tagbankhighlightsync-dev.mdc`
 **Cursor (v3+ / Glass):** `.code-workspace` files require the **Editor** window first — **Ctrl+Shift+N**
 (or **File → Open Editor Window**), then **Ctrl+Shift+P** → **Open Workspace from File...** →
-`C:\Users\small\koreader-dev.code-workspace`. CLI: `cursor C:\Users\small\koreader-dev.code-workspace --classic`.
-Both plugin repos live in **`C:\Users\small\`**.
+`koreader-dev.code-workspace` in a parent folder that contains both plugin repos. CLI: `cursor /path/to/koreader-dev.code-workspace --classic`.
+Both plugin repos as **sibling folders** (e.g. `~/AnkiKOAi.koplugin` and `~/tagbankhighlightsync.koplugin`).
 
 **Goals:** personal goals and current focus live in **AnkiKOAi `LOCAL_DEV.md`** only — AI reads that first.
 
@@ -21,7 +21,7 @@ Both plugin repos live in **`C:\Users\small\`**.
 | Folder | Role |
 |--------|------|
 | **AnkiKOAi.koplugin** | Highlights → Wiki / Vocab / Mem cards → AnkiConnect → desktop Anki |
-| **tagbankhighlightsync.koplugin** (this repo) | Tag bank, JSON sync via cloud, Markdown quote library (`C:\Users\small\`) |
+| **tagbankhighlightsync.koplugin** (this repo) | Tag bank, JSON sync via cloud, Markdown quote library (sibling repo) |
 | **KOReader Highlights** (Desktop) | PC WebDAV root (`webdav.exe` :8181) + Obsidian vault for generated `library/` |
 
 **Workflow:** Read on KOReader → AnkiKOAi sends cards to Anki; TagBankHighlightSync tags highlights,
@@ -83,7 +83,7 @@ bash setup-emulator-cloud.sh
 bash configure-emulator-webdav.sh
 
 # Sync both plugins + launch (delegates to AnkiKOAi dev-start.sh)
-bash dev-start.sh --emulator /mnt/c/Users/small/AnkiKOAi.koplugin/alice.epub
+bash dev-start.sh --emulator /path/to/AnkiKOAi.koplugin/alice.epub
 
 # Sync both without opening KOReader:
 bash dev-start.sh --sync-only
@@ -92,8 +92,8 @@ bash dev-start.sh --sync-only
 **Machine-specific (edit in your `LOCAL_DEV.md`):**
 
 - WSL distro: `Ubuntu (WSL)`
-- Repo path: `/mnt/c/Users/small/tagbankhighlightsync.koplugin`
-- Test book: `/mnt/c/Users/small/AnkiKOAi.koplugin/alice.epub`
+- Repo path: `<!-- e.g. /mnt/c/Users/you/tagbankhighlightsync.koplugin -->`
+- Test book: `<!-- e.g. /path/to/AnkiKOAi.koplugin/alice.epub -->`
 - Emulator data: `~/koreader-dev/emulator/usr/lib/koreader/`
 
 After launch: **Tools → More tools → Plugin management** — enable **Cloud storage** and
@@ -125,7 +125,7 @@ grep -E 'stack traceback|ERROR |WARN |TagBankHighlightSync|tag_bank_highlight_sy
 Run from **this repo** (`tagbankhighlightsync.koplugin`), not `AnkiKOAi.koplugin`:
 
 ```bash
-cd /mnt/c/Users/small/tagbankhighlightsync.koplugin
+cd "$(dirname "$0")/.."   # or your repo path
 bash _check.sh   # parse-check all .lua with emulator luajit
 ~/koreader-dev/emulator/usr/lib/koreader/luajit spec/run_tests.lua   # unit tests
 ```
@@ -134,9 +134,9 @@ bash _check.sh   # parse-check all .lua with emulator luajit
 
 ```bash
 ~/koreader-dev/emulator/usr/lib/koreader/luajit \
-  /mnt/c/Users/small/tagbankhighlightsync.koplugin/spec/validate_webdav_library.lua \
-  "/mnt/c/Users/small/Desktop/KOReader Highlights/alice.sdr.json" \
-  "/mnt/c/Users/small/Desktop/KOReader Highlights/library"
+  spec/validate_webdav_library.lua \
+  "/path/to/alice.sdr.json" \
+  "/path/to/library"
 ```
 
 ---
