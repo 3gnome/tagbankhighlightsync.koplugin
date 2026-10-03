@@ -11,11 +11,11 @@ First public beta of **TagBankHighlightSync** — tag highlights, sync annotatio
 ### Quote library
 - Markdown export to `library/quotes/`, `tags/`, `books/`, `master-quotes.md`
 - Screenshot capture, verse layout, scholarly headings for Obsidian
-- Optional filters when [AnkiKOAi](https://github.com/3gnome/AnkiKOAi.koplugin) is installed
+- Optional filters when [AnkiKoFlash](https://github.com/3gnome/AnkiKoFlash.koplugin) is installed
 
 ### Sync
 - Open / close / wake sync; close-book push-only upload
-- **Sync all books** — batch sync for reading history (also in AnkiKOAi **View All Highlights**)
+- **Sync all books** — batch sync for reading history (also in AnkiKoFlash **View All Highlights**)
 
 ## Install
 
@@ -25,4 +25,4 @@ Enable **TagBankHighlightSync** and **Cloud storage** under **Tools → Plugin m
 
 See [Getting started](https://github.com/3gnome/tagbankhighlightsync.koplugin/blob/main/docs/getting-started.md) for setup.
 
-**Optional companion:** [AnkiKOAi](https://github.com/3gnome/AnkiKOAi.koplugin) — Anki cards from highlights (MIT). **License:** AGPL-3.0.
+**Optional companion:** [AnkiKoFlash](https://github.com/3gnome/AnkiKoFlash.koplugin) — Anki cards from highlights (MIT). **License:** AGPL-3.0.

@@ -1,10 +1,22 @@
-local lfs = require("libs/libkoreader-lfs")
+local lfs = _G.lfs
+if not lfs then
+    local ok, mod = pcall(require, "libs/libkoreader-lfs")
+    if ok then
+        lfs = mod
+    end
+end
 
 local BatchSync = {}
 
+function BatchSync.summary_counts(total, failed)
+    total = math.max(0, tonumber(total) or 0)
+    failed = math.max(0, math.min(total, tonumber(failed) or 0))
+    return total - failed, failed
+end
+
 function BatchSync.find_sync_json_files(root_path)
     local files = {}
-    if not root_path or lfs.attributes(root_path, "mode") ~= "directory" then
+    if not lfs or not root_path or lfs.attributes(root_path, "mode") ~= "directory" then
         return files
     end
     for entry in lfs.dir(root_path) do

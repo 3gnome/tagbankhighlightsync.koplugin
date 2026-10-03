@@ -15,6 +15,17 @@ return function(assert_eq, assert_true, Merge)
     assert_eq(key1, key2, "PDF key stable")
     assert_true(not key1:match("^table:"), "PDF key not table pointer")
 
+    local same_start_a = {
+        page = "p", pos0 = "/body/p[1].0", pos1 = "/body/p[1].5", text = "short",
+    }
+    local same_start_b = {
+        page = "p", pos0 = "/body/p[1].0", pos1 = "/body/p[1].12", text = "longer",
+    }
+    local same_start_merge = Merge.Merge_highlights(
+        { same_start_a }, { same_start_b }, {})
+    assert_eq(#same_start_merge, 2,
+        "same pos0 with different pos1 remains separate highlights")
+
     local older = { page = "p", pos0 = "p", pos1 = "q", datetime = "2020-01-01 10:00:00" }
     local newer = { page = "p", pos0 = "p", pos1 = "q", datetime = "2024-01-01 10:00:00", text = "updated" }
     local merged = Merge.Merge_highlights({ older }, { newer }, { older })
@@ -42,6 +53,28 @@ return function(assert_eq, assert_true, Merge)
     assert_eq(tags[1], "grief", "tag union grief")
     assert_eq(tags[2], "love", "tag union love")
 
+    local local_duplicate_merge = Merge.Merge_highlights({
+        {
+            page = "p", pos0 = "split", pos1 = "end",
+            datetime = "2024-01-01 10:00:00",
+            highlight_sync_tags = { "love" },
+            highlight_sync_capture = "quotes/images/local.png",
+        },
+        {
+            page = "p", pos0 = "split", pos1 = "end",
+            datetime_updated = "2024-06-01 10:00:00",
+            highlight_sync_tags = { "grief" },
+        },
+    }, {}, {})
+    assert_eq(#local_duplicate_merge, 1,
+        "merge input dedupes same-position local annotations")
+    local split_tags = local_duplicate_merge[1].highlight_sync_tags or {}
+    table.sort(split_tags)
+    assert_eq(table.concat(split_tags, ","), "grief,love",
+        "merge input dedupe preserves split local tags")
+    assert_eq(local_duplicate_merge[1].highlight_sync_capture, "quotes/images/local.png",
+        "merge input dedupe preserves split local capture")
+
     local bookmark = {
         page = "b", pos0 = "bm0", pos1 = "bm1", text = "bookmark only",
     }
@@ -58,6 +91,63 @@ return function(assert_eq, assert_true, Merge)
     assert_eq(#persisted, 2, "merge_back keeps non-syncable")
     assert_eq(persisted[1].text, "bookmark only", "bookmark preserved")
     assert_eq(persisted[2].text, "sync me", "syncable updated")
+
+    local duplicate_full = {
+        bookmark,
+        {
+            page = "p", pos0 = "dup", pos1 = "end", text = "old copy",
+            datetime = "2024-01-01 10:00:00",
+        },
+        {
+            page = "p", pos0 = "dup", pos1 = "end", text = "new copy",
+            datetime_updated = "2024-06-01 10:00:00",
+        },
+    }
+    local duplicate_merged = {
+        {
+            page = "p", pos0 = "dup", pos1 = "end", text = "merged copy",
+            datetime_updated = "2024-06-02 10:00:00",
+        },
+    }
+    local deduped = Merge.merge_back_into_full(
+        duplicate_full, duplicate_merged,
+        function(item) return item.pos0 == "dup" end)
+    assert_eq(#deduped, 2,
+        "merge_back emits one syncable annotation for duplicate positions")
+    assert_eq(deduped[2].text, "merged copy",
+        "merge_back keeps merged duplicate winner")
+
+    local duplicate_non_syncable = Merge.merge_back_into_full(
+        {
+            { page = "p", pos0 = "ns", pos1 = "end", text = "note one" },
+            { page = "p", pos0 = "ns", pos1 = "end", text = "note two" },
+        },
+        {},
+        function() return false end)
+    assert_eq(#duplicate_non_syncable, 2,
+        "merge_back preserves same-position non-syncable annotations")
+
+    local deduped_annotations = Merge.dedupe_annotations({
+        {
+            page = "p", pos0 = "m", pos1 = "n",
+            datetime = "2024-01-01 10:00:00",
+            highlight_sync_tags = { "love" },
+            highlight_sync_capture = "quotes/images/a.png",
+        },
+        {
+            page = "p", pos0 = "m", pos1 = "n",
+            datetime_updated = "2024-06-01 10:00:00",
+            highlight_sync_tags = { "grief" },
+        },
+    }, function() return true end)
+    assert_eq(#deduped_annotations, 1,
+        "dedupe collapses same-position syncable annotations")
+    local deduped_tags = deduped_annotations[1].highlight_sync_tags
+    table.sort(deduped_tags)
+    assert_eq(table.concat(deduped_tags, ","), "grief,love",
+        "dedupe unions duplicate tags")
+    assert_eq(deduped_annotations[1].highlight_sync_capture, "quotes/images/a.png",
+        "dedupe preserves duplicate capture metadata")
 
     local after_delete = Merge.merge_back_into_full(
         { highlight, bookmark }, {}, is_syncable)
@@ -80,4 +170,28 @@ return function(assert_eq, assert_true, Merge)
     local cap_merge = Merge.Merge_highlights({ local_cap }, { remote_newer }, { local_cap })
     assert_eq(cap_merge[1].text, "edited on server", "newer text wins")
     assert_eq(cap_merge[1].highlight_sync_capture, "quotes/images/abc.png", "capture preserved on merge")
+
+    -- Tag deletion propagates: a tag removed on the newer side must not be
+    -- re-added from the older side (which still carries it).
+    local base_two_tags = {
+        page = "p", pos0 = "rm", pos1 = "end",
+        datetime = "2024-01-01 10:00:00",
+        highlight_sync_tags = { "love", "grief" },
+    }
+    local local_removed = {
+        page = "p", pos0 = "rm", pos1 = "end",
+        datetime = "2024-06-01 10:00:00",
+        highlight_sync_tags = { "love" },
+    }
+    local server_stale = {
+        page = "p", pos0 = "rm", pos1 = "end",
+        datetime = "2024-01-01 10:00:00",
+        highlight_sync_tags = { "love", "grief" },
+    }
+    local removal_merge = Merge.Merge_highlights(
+        { local_removed }, { server_stale }, { base_two_tags })
+    local removal_tags = removal_merge[1].highlight_sync_tags or {}
+    table.sort(removal_tags)
+    assert_eq(table.concat(removal_tags, ","), "love",
+        "tag removed on newer side propagates to stale side")
 end

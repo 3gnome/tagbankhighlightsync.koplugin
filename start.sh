@@ -9,10 +9,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEV_LIB="${ANKIKOOAI_SRC:-$(dirname "$SCRIPT_DIR")/AnkiKOAi.koplugin}/dev-lib.sh"
+DEV_LIB="${ANKIKOFLASH_SRC:-$(dirname "$SCRIPT_DIR")/AnkiKoFlash.koplugin}/dev-lib.sh"
 if [ ! -f "$DEV_LIB" ]; then
     echo "ERROR: dev-lib.sh not found at: $DEV_LIB" >&2
-    echo "Set ANKIKOOAI_SRC to the AnkiKOAi plugin directory." >&2
+    echo "Set ANKIKOFLASH_SRC to the AnkiKoFlash plugin directory." >&2
     exit 1
 fi
 # shellcheck source=/dev/null
@@ -24,7 +24,7 @@ print_help() {
     cat <<'EOF'
 start.sh - Launch KOReader with the TagBankHighlightSync plugin
 
-For AnkiKOAi + TagBankHighlightSync together, use: bash dev-start.sh --emulator [book]
+For AnkiKoFlash + TagBankHighlightSync together, use: bash dev-start.sh --emulator [book]
 
 MODES
   appimage   Launch AppImage (DEFAULT on WSL; still uses WSLg; no plugin sync)
@@ -42,7 +42,7 @@ OPTIONS
 
 EXAMPLES
   bash start.sh --sync-only
-  bash dev-start.sh --emulator /path/to/AnkiKOAi.koplugin/alice.epub
+  bash dev-start.sh --emulator /path/to/AnkiKoFlash.koplugin/alice.epub
 EOF
 }
 

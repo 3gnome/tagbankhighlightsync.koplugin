@@ -80,9 +80,37 @@ local function normalize_to_list(highlights)
     return list
 end
 
+local function merge_duplicate_annotations(left, right)
+    local winner = get_newer(right, left)
+    local merged = Tags.merge_annotation_tags(winner, left, right)
+    Tags.merge_capture_metadata(merged, left, right)
+    return merged
+end
+
+local function dedupe_annotations(annotations, should_dedupe)
+    local result = {}
+    local index_by_key = {}
+    for _, ann in ipairs(normalize_to_list(annotations)) do
+        if should_dedupe and not should_dedupe(ann) then
+            result[#result + 1] = ann
+        else
+            local key = generate_key(ann)
+            local existing_index = index_by_key[key]
+            if existing_index then
+                result[existing_index] =
+                    merge_duplicate_annotations(result[existing_index], ann)
+            else
+                index_by_key[key] = #result + 1
+                result[#result + 1] = ann
+            end
+        end
+    end
+    return result
+end
+
 local function convert_to_map(highlights)
     local map = {}
-    for _, h in ipairs(normalize_to_list(highlights)) do
+    for _, h in ipairs(dedupe_annotations(highlights)) do
         map[generate_key(h)] = h
     end
     return map
@@ -111,8 +139,8 @@ local function merge_highlights(local_annotations, server_annotations, last_sync
                 merged[key] = server_highlight
             else
                 local winner = get_newer(server_highlight, local_map[key])
-                merged[key] = Tags.merge_annotation_tags(
-                    winner, local_map[key], server_highlight)
+                merged[key] = Tags.merge_annotation_tags_3way(
+                    winner, last_sync_map[key], local_map[key], server_highlight)
                 Tags.merge_capture_metadata(
                     merged[key], local_map[key], server_highlight)
             end
@@ -160,7 +188,7 @@ function merge_back_into_full(full_annotations, merged_syncable, is_syncable)
     for _, ann in ipairs(full_list) do
         local key = generate_key(ann)
         if is_syncable(ann) then
-            if merged_map[key] then
+            if merged_map[key] and not seen_merged[key] then
                 result[#result + 1] = merged_map[key]
                 seen_merged[key] = true
             end
@@ -182,6 +210,7 @@ local M = {}
 
 M.Merge_highlights = merge_highlights
 M.merge_back_into_full = merge_back_into_full
+M.dedupe_annotations = dedupe_annotations
 M.generate_key = generate_key
 M.normalize_to_list = normalize_to_list
 M.serialize_pdf_pos = serialize_pdf_pos

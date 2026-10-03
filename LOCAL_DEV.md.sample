@@ -10,9 +10,9 @@ cp LOCAL_DEV.md.sample LOCAL_DEV.md
 **Cursor (v3+ / Glass):** `.code-workspace` files require the **Editor** window first — **Ctrl+Shift+N**
 (or **File → Open Editor Window**), then **Ctrl+Shift+P** → **Open Workspace from File...** →
 `koreader-dev.code-workspace` in a parent folder that contains both plugin repos. CLI: `cursor /path/to/koreader-dev.code-workspace --classic`.
-Both plugin repos as **sibling folders** (e.g. `~/AnkiKOAi.koplugin` and `~/tagbankhighlightsync.koplugin`).
+Both plugin repos as **sibling folders** (e.g. `~/AnkiKoFlash.koplugin` and `~/tagbankhighlightsync.koplugin`).
 
-**Goals:** personal goals and current focus live in **AnkiKOAi `LOCAL_DEV.md`** only — AI reads that first.
+**Goals:** personal goals and current focus live in **AnkiKoFlash `LOCAL_DEV.md`** only — AI reads that first.
 
 ---
 
@@ -20,15 +20,15 @@ Both plugin repos as **sibling folders** (e.g. `~/AnkiKOAi.koplugin` and `~/tagb
 
 | Folder | Role |
 |--------|------|
-| **AnkiKOAi.koplugin** | Highlights → Wiki / Vocab / Mem cards → AnkiConnect → desktop Anki |
+| **AnkiKoFlash.koplugin** | Highlights → Vocab / Mem cards → AnkiConnect → desktop Anki |
 | **tagbankhighlightsync.koplugin** (this repo) | Tag bank, JSON sync via cloud, Markdown quote library (sibling repo) |
 | **KOReader Highlights** (Desktop) | PC WebDAV root (`webdav.exe` :8181) + Obsidian vault for generated `library/` |
 
-**Workflow:** Read on KOReader → AnkiKOAi sends cards to Anki; TagBankHighlightSync tags highlights,
+**Workflow:** Read on KOReader → AnkiKoFlash sends cards to Anki; TagBankHighlightSync tags highlights,
 syncs `*.sdr.json`, and exports quote Markdown into `KOReader Highlights/library/`. JSON on WebDAV
 is the source of truth; Markdown is derived on **Sync now**.
 
-**Dev hub:** `bash dev-start.sh --emulator alice.epub` from **AnkiKOAi** syncs both plugins and
+**Dev hub:** `bash dev-start.sh --emulator alice.epub` from **AnkiKoFlash** syncs both plugins and
 launches once. This repo’s `dev-start.sh` delegates there.
 
 **Two cloud concepts (do not conflate):**
@@ -38,7 +38,7 @@ launches once. This repo’s `dev-start.sh` delegates there.
 
 Emulator one-time (this repo): `setup-emulator-cloud.sh` + `configure-emulator-webdav.sh`.
 
-**AI read order:** (1) AnkiKOAi `LOCAL_DEV.md` goals, (2) this file, (3) AnkiKOAi sample when task
+**AI read order:** (1) AnkiKoFlash `LOCAL_DEV.md` goals, (2) this file, (3) AnkiKoFlash sample when task
 touches Anki cards or shared dev-start.
 
 ---
@@ -73,7 +73,7 @@ at the repo root; unit tests live under `spec/`.
 
 ## Starting KOReader (development)
 
-Full sync/launch tables and env vars: **AnkiKOAi `LOCAL_DEV.md.sample` § Starting KOReader**.
+Full sync/launch tables and env vars: **AnkiKoFlash `LOCAL_DEV.md.sample` § Starting KOReader**.
 
 From **this repo** in WSL:
 
@@ -82,8 +82,8 @@ From **this repo** in WSL:
 bash setup-emulator-cloud.sh
 bash configure-emulator-webdav.sh
 
-# Sync both plugins + launch (delegates to AnkiKOAi dev-start.sh)
-bash dev-start.sh --emulator /path/to/AnkiKOAi.koplugin/alice.epub
+# Sync both plugins + launch (delegates to AnkiKoFlash dev-start.sh)
+bash dev-start.sh --emulator /path/to/AnkiKoFlash.koplugin/alice.epub
 
 # Sync both without opening KOReader:
 bash dev-start.sh --sync-only
@@ -93,7 +93,7 @@ bash dev-start.sh --sync-only
 
 - WSL distro: `Ubuntu (WSL)`
 - Repo path: `<!-- e.g. /mnt/c/Users/you/tagbankhighlightsync.koplugin -->`
-- Test book: `<!-- e.g. /path/to/AnkiKOAi.koplugin/alice.epub -->`
+- Test book: `<!-- e.g. /path/to/AnkiKoFlash.koplugin/alice.epub -->`
 - Emulator data: `~/koreader-dev/emulator/usr/lib/koreader/`
 
 After launch: **Tools → More tools → Plugin management** — enable **Cloud storage** and
@@ -122,7 +122,7 @@ grep -E 'stack traceback|ERROR |WARN |TagBankHighlightSync|tag_bank_highlight_sy
 
 ## Sanity check (optional)
 
-Run from **this repo** (`tagbankhighlightsync.koplugin`), not `AnkiKOAi.koplugin`:
+Run from **this repo** (`tagbankhighlightsync.koplugin`), not `AnkiKoFlash.koplugin`:
 
 ```bash
 cd "$(dirname "$0")/.."   # or your repo path

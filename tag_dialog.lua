@@ -7,6 +7,7 @@ local FFIUtil = require("ffi/util")
 local T = FFIUtil.template
 local _ = require("gettext")
 local TagMenu = require("tag_menu")
+local BookTagMenu = require("book_tag_menu")
 local VerseLayout = require("verse_layout")
 local HighlightCapture = require("highlight_capture")
 local Tags = require("tags")
@@ -128,6 +129,19 @@ function TagDialog.show_hub(plugin, hl, index)
                     callback = function()
                         UIManager:close(hub)
                         TagMenu.show_apply(plugin, hl, resolved_index, ann, {
+                            on_back = function()
+                                TagDialog.show_hub(plugin, hl, resolved_index)
+                            end,
+                        })
+                    end,
+                },
+            },
+            {
+                {
+                    text = _("Suggest tags from this book"),
+                    callback = function()
+                        UIManager:close(hub)
+                        BookTagMenu.show(plugin, hl, resolved_index, ann, {
                             on_back = function()
                                 TagDialog.show_hub(plugin, hl, resolved_index)
                             end,

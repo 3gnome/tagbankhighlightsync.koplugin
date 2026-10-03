@@ -134,6 +134,41 @@ function Tags.merge_annotation_tags(primary, ...)
     return copy
 end
 
+--- Three-way tag merge that lets removals propagate across devices.
+-- `primary` is the content winner (newer of local/server). Its tag set is
+-- authoritative for removals: a tag present in the baseline (`last_sync`) but
+-- absent from `primary` is treated as an explicit removal and is NOT re-added
+-- from the losing side. Tags added by either side (absent from baseline) are
+-- unioned, so independent additions still merge cleanly.
+function Tags.merge_annotation_tags_3way(primary, baseline, ...)
+    local copy = {}
+    for k, v in pairs(primary or {}) do
+        copy[k] = v
+    end
+    local base_set = {}
+    for _, t in ipairs(Tags.get_tags(baseline)) do
+        base_set[t] = true
+    end
+    local result = Tags.get_tags(primary)
+    local have = {}
+    for _, t in ipairs(result) do
+        have[t] = true
+    end
+    for i = 1, select("#", ...) do
+        local other = select(i, ...)
+        if other then
+            for _, t in ipairs(Tags.get_tags(other)) do
+                if not have[t] and not base_set[t] then
+                    have[t] = true
+                    result[#result + 1] = t
+                end
+            end
+        end
+    end
+    Tags.set_tags(copy, result)
+    return copy
+end
+
 --- Preserve capture metadata from any merged annotation copy (newest capture wins).
 function Tags.merge_capture_metadata(dest, ...)
     if not dest then

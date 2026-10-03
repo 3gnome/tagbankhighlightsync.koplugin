@@ -29,19 +29,26 @@ package.loaded["gettext"] = setmetatable({}, {
 _G._ = package.loaded["gettext"]
 
 local _test_data_dir
+local _test_data_dir_owned = false
 package.loaded["datastorage"] = {
     getDataDir = function()
         if not _test_data_dir then
             _test_data_dir = os.getenv("HIGHLIGHTSYNC_TEST_DIR")
-                or (os.tmpname():gsub("%..*", "") .. "_hs_test")
+            if not _test_data_dir then
+                _test_data_dir = os.tmpname():gsub("%..*", "") .. "_hs_test"
+                _test_data_dir_owned = true
+            end
         end
         return _test_data_dir
     end,
 }
 package.loaded["util"] = {
     makePath = function(path)
-        os.execute('mkdir -p "' .. path .. '" 2>/dev/null')
-        os.execute('mkdir "' .. path:gsub("/", "\\") .. '" 2>nul')
+        if package.config:sub(1, 1) == "\\" then
+            os.execute('mkdir "' .. path:gsub("/", "\\") .. '" 2>nul')
+        else
+            os.execute('mkdir -p "' .. path .. '" 2>/dev/null')
+        end
     end,
     partialMD5 = function() return "abc123" end,
     urlEncode = function(path, keep)
@@ -78,6 +85,10 @@ local CloudStorageCompat = require("cloudstorage_compat")
 local FromHighlight = require("from_highlight")
 local VerseLayout = require("verse_layout")
 local HighlightCapture = require("highlight_capture")
+local HighlightContext = require("highlight_context")
+local BookTagSuggestions = require("book_tag_suggestions")
+local BatchSync = require("batch_sync")
+local SyncStatus = require("sync_status")
 package.loaded["device"] = {
     hasWifiToggle = function() return true end,
     hasWifiRestore = function() return false end,
@@ -87,8 +98,16 @@ package.loaded["ui/network/manager"] = {
     isWifiOn = function() return false end,
 }
 package.loaded["ui/uimanager"] = {
-    nextTick = function(fn) if fn then fn() end end,
-    scheduleIn = function(_, fn) if fn then fn() end end,
+    nextTick = function(_, fn) if fn then fn() end end,
+    scheduleIn = function(_, _, fn) if fn then fn() end end,
+    show = function() end,
+    close = function() end,
+    forceRePaint = function() end,
+}
+package.loaded["ui/widget/infomessage"] = {
+    new = function(_, args)
+        return { text = args.text, timeout = args.timeout }
+    end,
 }
 package.loaded["logger"] = package.loaded["logger"] or {
     err = function() end,
@@ -116,15 +135,17 @@ package.loaded["ui/widget/buttondialog"] = package.loaded["ui/widget/buttondialo
 package.loaded["ui/widget/confirmbox"] = package.loaded["ui/widget/confirmbox"] or {}
 package.loaded["ui/widget/inputdialog"] = package.loaded["ui/widget/inputdialog"] or {}
 package.loaded["ui/widget/menu"] = package.loaded["ui/widget/menu"] or {}
-package.loaded["ui/widget/infomessage"] = package.loaded["ui/widget/infomessage"] or {}
 package.loaded["ffi/util"] = package.loaded["ffi/util"] or { template = function(s) return s end }
 local TagMenu = require("tag_menu")
+local BookTagMenu = require("book_tag_menu")
 local SyncAllBooks = require("sync_all_books")
 
 require("merge_spec")(assert_eq, assert_true, Merge)
 require("export_spec")(assert_eq, assert_true, Export, OutputSettings)
 require("verse_layout_spec")(assert_eq, assert_true, VerseLayout)
 require("highlight_capture_spec")(assert_eq, assert_true, HighlightCapture, Tags)
+require("highlight_context_spec")(assert_eq, assert_true, HighlightContext)
+require("book_tag_suggestions_spec")(assert_eq, assert_true, BookTagSuggestions)
 require("output_settings_spec")(assert_eq, assert_true, OutputSettings, Merge)
 require("tags_spec")(assert_eq, assert_true, Tags)
 require("tag_bank_spec")(assert_eq, assert_true, TagBank, Tags)
@@ -135,9 +156,20 @@ require("sync_now_untagged_spec")(assert_eq, assert_true, LibraryExport, Library
 require("sync_background_spec")(assert_eq, assert_true, SyncBackground)
 require("sync_post_write_spec")(assert_eq, assert_true, SyncPostWrite)
 require("cloudstorage_compat_spec")(assert_eq, assert_true, CloudStorageCompat)
+require("sync_progress_spec")(assert_eq, assert_true, require("sync_progress"))
+require("sync_status_spec")(assert_eq, assert_true, SyncStatus)
+require("batch_sync_spec")(assert_eq, assert_true, BatchSync)
 require("plugin_peers_spec")(assert_eq, assert_true, PluginPeers)
 require("tag_menu_spec")(assert_eq, assert_true, TagMenu)
+require("book_tag_menu_spec")(assert_eq, assert_true, BookTagMenu, TagMenu, Tags)
 require("sync_all_books_spec")(assert_eq, assert_true, SyncAllBooks)
 
 print(string.format("Results: %d passed, %d failed", passed, failed))
+if _test_data_dir_owned and _test_data_dir then
+    if package.config:sub(1, 1) == "\\" then
+        os.execute('rmdir /s /q "' .. _test_data_dir:gsub("/", "\\") .. '" 2>nul')
+    else
+        os.execute('rm -rf -- "' .. _test_data_dir .. '"')
+    end
+end
 os.exit(failed > 0 and 1 or 0)

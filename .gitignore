@@ -2,6 +2,9 @@
 LOCAL_DEV.md
 .cursor/
 
+# Cursor Shift tool state (machine-specific, may embed personal paths)
+.shift/
+
 # Dev / emulator logs
 koreader.log
 koreader-emulator.log
@@ -22,3 +25,7 @@ nul
 .idea/
 *.swp
 *~
+
+# Internal dev artifacts (not for public release)
+orchestrator_changelog.md
+scripts/_*

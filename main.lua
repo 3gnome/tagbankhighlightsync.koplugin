@@ -20,6 +20,8 @@ local LibraryExport = require("library_export")
 local LibraryUpload = require("library_upload")
 local CloudStorageCompat = require("cloudstorage_compat")
 local SyncBackground = require("sync_background")
+local SyncProgress = require("sync_progress")
+local SyncStatus = require("sync_status")
 local SyncPostWrite = require("sync_post_write")
 local SyncAllBooks = require("sync_all_books")
 local Tags = require("tags")
@@ -44,6 +46,7 @@ TagBankHighlightSync.default_settings = {
     sync_on_close = false,
     sync_on_resume = false,
     pending_sync = false,
+    last_sync_status = nil,
     last_sync_time = nil,
 }
 
@@ -84,6 +87,12 @@ function TagBankHighlightSync:init()
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
     self:registerSyncEvents()
+
+    -- Dev-only OCR harness: no-op unless KOREADER_CAPTURE_DIR is set.
+    local dev_ok, dev_capture = pcall(require, "dev-capture")
+    if dev_ok and dev_capture and dev_capture.start then
+        dev_capture.start()
+    end
 end
 
 function TagBankHighlightSync:registerSyncEvents()
@@ -213,6 +222,13 @@ local function write_json_file(path, data, pretty)
     if os.rename(tmp, path) then
         return true
     end
+    -- Some platforms cannot rename over an existing destination; remove the
+    -- stale file first so the replace stays atomic instead of truncating.
+    os.remove(path)
+    if os.rename(tmp, path) then
+        return true
+    end
+    -- Last resort (e.g. cross-device rename): write in place.
     file = io.open(path, "w")
     if not file then
         os.remove(tmp)
@@ -408,7 +424,15 @@ function TagBankHighlightSync:onSyncForPath(ctx, local_path, cached_path, income
         logger.warn("TagBankHighlightSync: cached sync snapshot unreadable:", cached_path)
     end
     local cached_highlights = OutputSettings.unwrap_payload(cached_raw)
-    local income_highlights = OutputSettings.unwrap_payload(select(1, read_json_file(income_path)))
+    local income_raw, income_ok = read_json_file(income_path)
+    if not income_ok then
+        logger.err("TagBankHighlightSync: remote sync file is corrupt, aborting merge:", income_path)
+        if lfs.attributes(income_path, "mode") == "file" then
+            copy_file(income_path, income_path .. ".corrupt.bak")
+        end
+        return false
+    end
+    local income_highlights = OutputSettings.unwrap_payload(income_raw)
 
     if self.settings.backup_before_sync and lfs.attributes(local_path, "mode") == "file" then
         if not copy_file(local_path, local_path .. ".bak") then
@@ -446,8 +470,6 @@ function TagBankHighlightSync:onSyncForPath(ctx, local_path, cached_path, income
         end)
     end
 
-    self.settings.last_sync_time = os.date("%Y-%m-%d %H:%M:%S")
-    self:saveSettings()
     return true, merged
 end
 
@@ -467,9 +489,9 @@ function TagBankHighlightSync:syncBookAtPath(doc_path, silent, on_done)
         if on_done then on_done(false) end
         return
     end
-    local filtered = OutputSettings.filter_annotations(
-        Merge.normalize_to_list(self:getAnnotationsForPath(doc_path)), self.settings)
-    if #filtered == 0 then
+    local full_annotations = Merge.normalize_to_list(self:getAnnotationsForPath(doc_path))
+    local filtered = OutputSettings.filter_annotations(full_annotations, self.settings)
+    if #filtered == 0 and #full_annotations == 0 then
         if on_done then on_done(true) end
         return
     end
@@ -486,7 +508,6 @@ function TagBankHighlightSync:syncBookAtPath(doc_path, silent, on_done)
     local server = OutputSettings.build_sync_server(self.settings.sync_server, self.settings, ctx)
     cs:sync(server, ctx.sync_path, function(local_path, cached_path, income_path)
         if not local_path then
-            if on_done then on_done(false) end
             return CloudStorageCompat.SYNC_ABORT
         end
         local ok, success = pcall(function()
@@ -494,12 +515,17 @@ function TagBankHighlightSync:syncBookAtPath(doc_path, silent, on_done)
         end)
         if not ok then
             logger.err("TagBankHighlightSync: sync at path failed:", success)
-            if on_done then on_done(false) end
             return CloudStorageCompat.SYNC_ABORT
         end
-        if on_done then on_done(success) end
         return success
-    end, silent)
+    end, silent, nil, function(outcome)
+        SyncStatus.apply_outcome(
+            self.settings, outcome, os.date("%Y-%m-%d %H:%M:%S"))
+        self:saveSettings()
+        if on_done then
+            on_done(outcome and outcome.success == true, outcome)
+        end
+    end)
 end
 
 function TagBankHighlightSync:syncAllBooksFromHistory(opts)
@@ -543,40 +569,41 @@ function TagBankHighlightSync:syncAllBooksFromHistory(opts)
         local idx = 1
         local failures = 0
         local total = #books
-        local prog_notif
+        local progress_token
 
         local function show_progress(label)
-            if prog_notif then UIManager:close(prog_notif) end
-            prog_notif = InfoMessage:new{
-                text = label,
-                timeout = 120,
-            }
-            UIManager:show(prog_notif)
+            progress_token = SyncProgress.show(label)
         end
 
         local function finish_batch()
             self.is_syncing = false
             self._sync_all_in_progress = false
-            if prog_notif then UIManager:close(prog_notif) end
+            SyncProgress.close(progress_token)
+            local succeeded, failed = BatchSync.summary_counts(total, failures)
+            SyncStatus.apply(self.settings,
+                failed == 0 and SyncStatus.SUCCESS or SyncStatus.FAILED,
+                os.date("%Y-%m-%d %H:%M:%S"))
+            self:saveSettings()
             if not opts.silent then
-                local msg
-                if failures == 0 then
-                    msg = T(_("Synced highlights from %1 book(s)."), total)
-                else
-                    msg = T(_("Synced %1 book(s); %2 failed."),
-                        total - failures, failures)
-                end
                 UIManager:show(InfoMessage:new{
-                    text = msg,
+                    text = T(_("Batch sync: %1 succeeded, %2 failed."),
+                        succeeded, failed),
                     timeout = 4,
                 })
             end
             if opts.on_done then
-                opts.on_done(failures == 0, total, failures)
+                opts.on_done(failed == 0, total, failed)
             end
         end
 
-        local function sync_next()
+        local sync_next
+        local function schedule_next()
+            UIManager:scheduleIn(0, function()
+                sync_next()
+            end)
+        end
+
+        sync_next = function()
             if idx > total then
                 finish_batch()
                 return
@@ -585,15 +612,22 @@ function TagBankHighlightSync:syncAllBooksFromHistory(opts)
             local n = idx
             idx = idx + 1
             show_progress(T(_("Syncing %1 (%2/%3)…"), book.title, n, total))
-            self:syncBookAtPath(book.path, true, function(ok)
-                if not ok then
-                    failures = failures + 1
-                end
-                sync_next()
+            local started, err = pcall(function()
+                self:syncBookAtPath(book.path, true, function(ok)
+                    if not ok then
+                        failures = failures + 1
+                    end
+                    schedule_next()
+                end)
             end)
+            if not started then
+                logger.err("TagBankHighlightSync: sync-all book failed:", err)
+                failures = failures + 1
+                schedule_next()
+            end
         end
 
-        sync_next()
+        schedule_next()
     end
 
     if not SyncBackground.network_ready_for_merge_sync() then
@@ -759,7 +793,15 @@ function TagBankHighlightSync:onSync(ctx, local_path, cached_path, income_path, 
         logger.warn("TagBankHighlightSync: cached sync snapshot unreadable:", cached_path)
     end
     local cached_highlights = OutputSettings.unwrap_payload(cached_raw)
-    local income_highlights = OutputSettings.unwrap_payload(select(1, read_json_file(income_path)))
+    local income_raw, income_ok = read_json_file(income_path)
+    if not income_ok then
+        logger.err("TagBankHighlightSync: remote sync file is corrupt, aborting merge:", income_path)
+        if lfs.attributes(income_path, "mode") == "file" then
+            copy_file(income_path, income_path .. ".corrupt.bak")
+        end
+        return false
+    end
+    local income_highlights = OutputSettings.unwrap_payload(income_raw)
 
     if self.settings.backup_before_sync and lfs.attributes(local_path, "mode") == "file" then
         if not copy_file(local_path, local_path .. ".bak") then
@@ -778,8 +820,6 @@ function TagBankHighlightSync:onSync(ctx, local_path, cached_path, income_path, 
     local defer_library = SyncBackground.should_defer_library(self._sync_opts)
     SyncPostWrite.run(self, ctx, merged, full_annotations, reload, defer_library)
 
-    self.settings.last_sync_time = os.date("%Y-%m-%d %H:%M:%S")
-    self:saveSettings()
     return true, merged
 end
 
@@ -875,12 +915,16 @@ function TagBankHighlightSync:runCloudUploadQueue(queue, on_done)
             return
         end
         cs:sync(job.server, job.path, function()
-            if job.on_result then
-                all_ok = job.on_result(all_ok) and all_ok
-            end
-            upload_next()
             return true
-        end, true)
+        end, true, nil, function(outcome)
+            local job_ok = outcome and outcome.success == true
+            if job_ok and job.on_result then
+                local ok_result, result = pcall(job.on_result, all_ok)
+                job_ok = ok_result and result == true
+            end
+            all_ok = all_ok and job_ok
+            upload_next()
+        end)
     end
     upload_next()
 end
@@ -931,6 +975,7 @@ function TagBankHighlightSync:markLibrarySynced(ann)
     Tags.set_library_sync_state(ann, Tags.compute_library_hash(ann, expanded))
     if self.ui and self.ui.doc_settings then
         self.ui.doc_settings:saveSetting("annotations", self.ui.annotation.annotations)
+        self.ui.doc_settings:flush()
     end
 end
 
@@ -1211,6 +1256,19 @@ function TagBankHighlightSync:syncNow(hl, resolved_index, ann)
     local library_unchanged = self.settings.tagged_library_enabled
         and not LibraryUpload.target_needs_library_work(ann, self.settings.tag_bank, self.settings)
 
+    if self:canSync(true) then
+        if self.is_syncing then
+            UIManager:show(InfoMessage:new{
+                text = _("Highlight sync already in progress."),
+                timeout = 2,
+            })
+            return
+        end
+        self._sync_now_target_ann = ann
+        self:SyncBookHighlights(false, false, { background = true })
+        return
+    end
+
     if self.settings.tagged_library_enabled and needs_library then
         local ctx = self:buildSyncContext()
         if ctx then
@@ -1225,16 +1283,6 @@ function TagBankHighlightSync:syncNow(hl, resolved_index, ann)
                     ann, lib_ctx, self.ui.annotation.annotations, self.settings)
             end
         end
-    end
-
-    if self:canSync(true) then
-        UIManager:show(InfoMessage:new{
-            text = _("Syncing…"),
-            timeout = 1,
-        })
-        self._sync_now_target_ann = ann
-        self:SyncBookHighlights(false, false)
-        return
     end
 
     if self.settings.tagged_library_enabled and needs_library then
@@ -1278,6 +1326,7 @@ end
 function TagBankHighlightSync:SyncBookHighlights(silent, reload, opts)
     opts = opts or {}
     if not self:canSync(true) then
+        self._sync_now_target_ann = nil
         return
     end
 
@@ -1285,14 +1334,20 @@ function TagBankHighlightSync:SyncBookHighlights(silent, reload, opts)
 
     if self.is_syncing then
         logger.warn("TagBankHighlightSync: Duplicate sync attempt ignored.")
+        self._sync_now_target_ann = nil
         return
     end
 
     self._sync_opts = opts
     local background = SyncBackground.should_defer_library(opts)
+    local function clear_transient_sync_state()
+        self._sync_opts = nil
+        self._sync_now_target_ann = nil
+    end
 
     local cs = self.ui.cloudstorage
     if not cs then
+        clear_transient_sync_state()
         if not silent then
             UIManager:show(InfoMessage:new{
                 text = _("Cloud storage plugin is required for highlight sync."),
@@ -1304,9 +1359,22 @@ function TagBankHighlightSync:SyncBookHighlights(silent, reload, opts)
 
     local do_sync = function()
         self.is_syncing = true
+        local progress_token = SyncProgress.show(background
+            and _("Syncing highlights in background…")
+            or _("Syncing highlights…"))
+        local function finish_progress()
+            SyncProgress.close(progress_token)
+        end
+        local function record_local_failure()
+            SyncStatus.apply(self.settings, SyncStatus.FAILED,
+                os.date("%Y-%m-%d %H:%M:%S"))
+            self:saveSettings()
+        end
         local ctx = self:buildSyncContext()
         if not ctx then
-            self._sync_opts = nil
+            clear_transient_sync_state()
+            record_local_failure()
+            finish_progress()
             self:releaseSyncLock()
             return
         end
@@ -1318,7 +1386,9 @@ function TagBankHighlightSync:SyncBookHighlights(silent, reload, opts)
             ctx.filtered_annotations, self.settings, ctx.metadata)
 
         if not write_json_file(ctx.sync_path, payload, not background and self.settings.json_pretty) then
-            self._sync_opts = nil
+            clear_transient_sync_state()
+            record_local_failure()
+            finish_progress()
             self:releaseSyncLock()
             if not silent then
                 UIManager:show(InfoMessage:new{
@@ -1335,33 +1405,57 @@ function TagBankHighlightSync:SyncBookHighlights(silent, reload, opts)
         end
 
         local server = OutputSettings.build_sync_server(self.settings.sync_server, self.settings, ctx)
-        local caller_pre = nil
-        if not silent then
-            caller_pre = function()
-                UIManager:show(InfoMessage:new{
-                    text = _("Syncing highlights…"),
-                    timeout = 1,
-                })
-            end
-        end
-
         local sync_generation = self._sync_generation or 0
+        local merged_result
+        local merge_error
         cs:sync(server, ctx.sync_path, function(local_path, cached_path, income_path)
             if not self:isSyncGenerationCurrent(sync_generation) then
-                self:releaseSyncLock()
-                self._sync_opts = nil
                 return CloudStorageCompat.SYNC_ABORT
             end
             if not local_path then
-                self:releaseSyncLock()
-                self._sync_opts = nil
                 return CloudStorageCompat.SYNC_ABORT
             end
             local ok, success, merged = pcall(function()
                 return self:onSync(ctx, local_path, cached_path, income_path, reload)
             end)
+            if not ok then
+                logger.err("TagBankHighlightSync: merge failed:", success)
+                merge_error = success
+                return CloudStorageCompat.SYNC_ABORT
+            end
+            if not success then
+                return false
+            end
+            merged_result = merged
+            return success
+        end, silent, nil, function(outcome)
+            finish_progress()
             self:releaseSyncLock()
             self._sync_opts = nil
+            if not self:isSyncGenerationCurrent(sync_generation) then
+                self._sync_now_target_ann = nil
+                return
+            end
+            SyncStatus.apply_outcome(
+                self.settings, outcome, os.date("%Y-%m-%d %H:%M:%S"))
+            self:saveSettings()
+            if not outcome or outcome.success ~= true then
+                self._sync_now_target_ann = nil
+                if merge_error and not silent then
+                    UIManager:show(InfoMessage:new{
+                        text = T(_("Highlight sync failed: %1"),
+                            SyncPostWrite.truncate_error(merge_error)),
+                        timeout = 4,
+                    })
+                end
+                return
+            end
+            if background then
+                clear_transient_sync_state()
+                self:scheduleBackgroundLibraryWork(ctx, merged_result, server)
+                return
+            end
+
             local function show_followup_error(err)
                 self._sync_now_target_ann = nil
                 if not silent then
@@ -1375,92 +1469,63 @@ function TagBankHighlightSync:SyncBookHighlights(silent, reload, opts)
             local function safe_followup(name, fn)
                 return SyncPostWrite.safe_invoke(name, fn, show_followup_error)
             end
-            if not ok then
-                logger.err("TagBankHighlightSync: merge failed:", success)
-                if not silent then
-                    UIManager:show(InfoMessage:new{
-                        text = T(_("Highlight sync failed: %1"),
-                            SyncPostWrite.truncate_error(success)),
-                        timeout = 4,
-                    })
-                end
-                return CloudStorageCompat.SYNC_ABORT
-            end
-            if not success then
-                return false
-            end
-            if success then
-                if self.settings.pending_sync then
-                    self.settings.pending_sync = false
-                    self:saveSettings()
-                end
-                if background and self:isSyncGenerationCurrent(sync_generation) then
-                    self:scheduleBackgroundLibraryWork(ctx, merged, server)
-                    return success
-                end
-                if background then
-                    return success
-                end
-                safe_followup("sync follow-up", function()
-                    self:uploadExportFiles(ctx, server, function(exports_ok)
-                        safe_followup("sync follow-up callback", function()
-                            local target = self._sync_now_target_ann
-                            self._sync_now_target_ann = nil
-                            local function finish_library(library_ok)
-                                safe_followup("finish library", function()
-                                    local all_ok = exports_ok and library_ok
-                                    if target and self.settings.tagged_library_enabled then
-                                        if all_ok then
-                                            UIManager:show(InfoMessage:new{
-                                                text = _("Sync complete."),
-                                                timeout = 2,
-                                            })
-                                        else
-                                            UIManager:show(InfoMessage:new{
-                                                text = _("Sync finished with upload errors."),
-                                                timeout = 3,
-                                            })
-                                        end
-                                    elseif not silent and not all_ok then
-                                        UIManager:show(InfoMessage:new{
-                                            text = _("Sync finished with upload errors."),
-                                            timeout = 3,
-                                        })
-                                    end
-                                end)
-                            end
-                            if self.settings.tagged_library_enabled then
-                                safe_followup("upload library", function()
-                                    self:uploadLibraryFiles(ctx, target, finish_library)
-                                end)
-                            else
-                                finish_library(true)
-                            end
-                        end)
+            safe_followup("sync follow-up", function()
+                self:uploadExportFiles(ctx, server, function(exports_ok)
+                    safe_followup("sync follow-up callback", function()
+                        local target = self._sync_now_target_ann
+                        self._sync_now_target_ann = nil
+                        local function finish_library(library_ok)
+                            safe_followup("finish library", function()
+                                local all_ok = exports_ok and library_ok
+                                if target and self.settings.tagged_library_enabled then
+                                    UIManager:show(InfoMessage:new{
+                                        text = all_ok and _("Sync complete.")
+                                            or _("Sync finished with upload errors."),
+                                        timeout = all_ok and 2 or 3,
+                                    })
+                                elseif not silent and not all_ok then
+                                    UIManager:show(InfoMessage:new{
+                                        text = _("Sync finished with upload errors."),
+                                        timeout = 3,
+                                    })
+                                end
+                            end)
+                        end
+                        if self.settings.tagged_library_enabled then
+                            safe_followup("upload library", function()
+                                self:uploadLibraryFiles(ctx, target, finish_library)
+                            end)
+                        else
+                            finish_library(true)
+                        end
                     end)
                 end)
-            end
-            return success
-        end, silent, caller_pre)
+            end)
+        end)
     end
 
     if not SyncBackground.network_ready_for_merge_sync() then
         if SyncBackground.should_queue_offline(silent, opts) then
-            self.settings.pending_sync = true
+            SyncStatus.apply(self.settings, SyncStatus.DEFERRED,
+                os.date("%Y-%m-%d %H:%M:%S"))
             self:saveSettings()
+            clear_transient_sync_state()
             return
         end
         if NetworkMgr:willRerunWhenConnected(do_sync) then
-            self.settings.pending_sync = true
+            SyncStatus.apply(self.settings, SyncStatus.DEFERRED,
+                os.date("%Y-%m-%d %H:%M:%S"))
             self:saveSettings()
+        else
+            clear_transient_sync_state()
         end
         return
     end
-    do_sync()
+    UIManager:scheduleIn(0, do_sync)
 end
 
 function TagBankHighlightSync:onSyncBookHighlights()
-    self:SyncBookHighlights(false, false)
+    self:SyncBookHighlights(false, false, { background = true })
 end
 
 function TagBankHighlightSync:onDispatcherRegisterActions()
@@ -1524,6 +1589,9 @@ function TagBankHighlightSync:onCloseDocument()
     end
     if not self:flushLocalSyncJson(ctx, { compact = true, skip_exports = true }) then
         logger.warn("TagBankHighlightSync: close sync local write failed:", ctx.sync_path)
+        SyncStatus.apply(self.settings, SyncStatus.FAILED,
+            os.date("%Y-%m-%d %H:%M:%S"))
+        self:saveSettings()
         return
     end
     local filtered = OutputSettings.filter_annotations(
@@ -1535,7 +1603,8 @@ function TagBankHighlightSync:onCloseDocument()
     if SyncBackground.network_ready_for_raw_push() then
         SyncBackground.schedule_close_push(snapshot)
     else
-        self.settings.pending_sync = true
+        SyncStatus.apply(self.settings, SyncStatus.DEFERRED,
+            os.date("%Y-%m-%d %H:%M:%S"))
         self:saveSettings()
     end
 end
@@ -1683,12 +1752,22 @@ function TagBankHighlightSync:setSyncRemoteFolder(touchmenu_instance)
     }
     local text = cs:getServerNameType(server) or _("not set")
     if server then
-        text = text .. "\n\n" .. T(_("Folder path:\n%1"), cs.getReadablePath(server))
+        text = text .. "\n\n" .. T(_("Folder path:\n%1"), cs:getReadablePath(server))
             .. "\n\n" .. _("Set up the same cloud folder on each device to sync across your devices.")
             .. "\n\n" .. _("To change folder: tap Change folder…, tap your WebDAV server, open / (root), then long-press the bold row \"Long-press here to choose current folder\" and tap Choose.")
     end
-    if self.settings.last_sync_time then
-        text = text .. "\n\n" .. T(_("Last sync: %1"), self.settings.last_sync_time)
+    local last_outcome = SyncStatus.format_last(self.settings, {
+        [SyncStatus.SUCCESS] = _("Succeeded"),
+        [SyncStatus.FAILED] = _("Failed"),
+        [SyncStatus.DEFERRED] = _("Deferred"),
+        unknown = _("Unknown"),
+    })
+    if last_outcome then
+        text = text .. "\n\n" .. T(_("Last outcome: %1"), last_outcome)
+    end
+    if self.settings.pending_sync then
+        text = text .. "\n\n" .. _(
+            "Sync pending — queued changes will retry on the next full sync.")
     end
     dialogue = ButtonDialog:new{
         title = T(_("Cloud storage: %1"), text),
@@ -1705,6 +1784,13 @@ function TagBankHighlightSync:batchSyncCurrentFolder(touchmenu_instance)
         })
         return
     end
+    if self.is_syncing then
+        UIManager:show(InfoMessage:new{
+            text = _("Highlight sync already in progress."),
+            timeout = 2,
+        })
+        return
+    end
     local root = self.ui.file_chooser and self.ui.file_chooser.path
     if not root then
         return
@@ -1717,19 +1803,29 @@ function TagBankHighlightSync:batchSyncCurrentFolder(touchmenu_instance)
         })
         return
     end
-    UIManager:show(InfoMessage:new{
-        text = T(_("Batch syncing %1 files…"), #files),
-        timeout = 2,
-    })
     local cs = self.ui.cloudstorage
+    CloudStorageCompat.ensureCloudSyncPatch(cs)
     local idx = 1
+    local failures = 0
+    local progress_token = SyncProgress.show(
+        T(_("Batch syncing %1 files…"), #files))
+    local function finish_batch()
+        SyncProgress.close(progress_token)
+        if touchmenu_instance then touchmenu_instance:updateItems() end
+        local succeeded, failed = BatchSync.summary_counts(#files, failures)
+        SyncStatus.apply(self.settings,
+            failed == 0 and SyncStatus.SUCCESS or SyncStatus.FAILED,
+            os.date("%Y-%m-%d %H:%M:%S"))
+        self:saveSettings()
+        UIManager:show(InfoMessage:new{
+            text = T(_("Batch sync: %1 succeeded, %2 failed."),
+                succeeded, failed),
+            timeout = 4,
+        })
+    end
     local function sync_next()
         if idx > #files then
-            if touchmenu_instance then touchmenu_instance:updateItems() end
-            UIManager:show(InfoMessage:new{
-                text = _("Batch sync complete."),
-                timeout = 2,
-            })
+            finish_batch()
             return
         end
         local path = files[idx]
@@ -1739,9 +1835,13 @@ function TagBankHighlightSync:batchSyncCurrentFolder(touchmenu_instance)
             book_title = path:match("([^/]+)%.json$") or "book",
         })
         cs:sync(server, path, function()
-            sync_next()
             return true
-        end, true)
+        end, true, nil, function(outcome)
+            if not outcome or outcome.success ~= true then
+                failures = failures + 1
+            end
+            sync_next()
+        end)
     end
     sync_next()
 end
@@ -1755,7 +1855,10 @@ function TagBankHighlightSync:addToMainMenu(menu_items)
                 text_func = function()
                     local cs = self.ui.cloudstorage
                     local text = cs and cs:getServerNameType(self.settings.sync_server)
-                    return T(_("Cloud folder: %1"), text or _("not set"))
+                    return SyncStatus.append_pending(
+                        T(_("Cloud folder: %1"), text or _("not set")),
+                        self.settings.pending_sync,
+                        _("Sync pending"))
                 end,
                 callback = function(touchmenu_instance)
                     if not self.ui.cloudstorage then
@@ -1772,7 +1875,7 @@ function TagBankHighlightSync:addToMainMenu(menu_items)
             {
                 text = _("Sync Highlights"),
                 callback = function()
-                    self:SyncBookHighlights(false, true)
+                    self:SyncBookHighlights(false, false, { background = true })
                 end,
                 enabled_func = function()
                     return self:canSync(true)

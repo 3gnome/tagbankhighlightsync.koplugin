@@ -10,7 +10,10 @@ local LibraryUpload = require("library_upload")
 local TagBank = require("tag_bank")
 local Tags = require("tags")
 local Merge = require("merge")
+local SyncProgress = require("sync_progress")
+local SyncStatus = require("sync_status")
 local logger = require("logger")
+local _ = require("gettext")
 
 local lfs = _G.lfs
 if not lfs then
@@ -65,10 +68,10 @@ function SyncBackground.network_ready_for_sync()
     return SyncBackground.network_ready_for_raw_push()
 end
 
-local function set_pending_sync(value)
+local function set_sync_status(status)
     local settings = G_reader_settings:readSetting(SETTINGS_KEY)
     if settings then
-        settings.pending_sync = value
+        SyncStatus.apply(settings, status, os.date("%Y-%m-%d %H:%M:%S"))
         G_reader_settings:saveSetting(SETTINGS_KEY, settings)
     end
 end
@@ -141,6 +144,14 @@ local function build_close_library_jobs(snapshot)
         queue, refresh.annotations, bank, settings)
 end
 
+local function finish_close_push(progress_token, status, deferred_msg)
+    set_sync_status(status)
+    SyncProgress.close(progress_token)
+    if deferred_msg then
+        SyncProgress.toast(deferred_msg, 4)
+    end
+end
+
 --- Deferred push-only upload after book close (no plugin instance required).
 function SyncBackground.schedule_close_push(snapshot)
     if not snapshot or not snapshot.sync_path or not snapshot.base_server then
@@ -148,29 +159,46 @@ function SyncBackground.schedule_close_push(snapshot)
     end
     UIManager:scheduleIn(SyncBackground.CLOSE_SYNC_DEFER_SEC, function()
         if not SyncBackground.network_ready_for_raw_push() then
-            set_pending_sync(true)
+            set_sync_status(SyncStatus.DEFERRED)
             return
         end
-        local library_jobs = snapshot.library_jobs
-        if not library_jobs and snapshot.library_refresh then
-            library_jobs = build_close_library_jobs(snapshot)
-        end
-        local result = CloudStorageCompat.pushSyncFile(
-            snapshot.base_server, snapshot.server, snapshot.sync_path)
-        local library_ok = true
-        if library_jobs and #library_jobs > 0 then
-            library_ok = CloudStorageCompat.pushFileQueue(
-                snapshot.base_server, library_jobs)
-        end
-        if result.conflict then
-            logger.info("TagBankHighlightSync: close push conflict; full merge on next open")
-            set_pending_sync(true)
-        elseif not result.ok then
-            logger.warn("TagBankHighlightSync: close push upload failed")
-            set_pending_sync(true)
-        elseif not library_ok then
-            logger.warn("TagBankHighlightSync: close library upload failed")
-            set_pending_sync(true)
+        local progress_token = SyncProgress.show(_("Uploading highlights on close…"))
+        local ok, err = pcall(function()
+            local library_jobs = snapshot.library_jobs
+            if not library_jobs and snapshot.library_refresh then
+                library_jobs = build_close_library_jobs(snapshot)
+            end
+            local result = CloudStorageCompat.pushSyncFile(
+                snapshot.base_server, snapshot.server, snapshot.sync_path)
+            if result.conflict then
+                logger.info("TagBankHighlightSync: close push conflict; full merge on next open")
+                finish_close_push(progress_token, SyncStatus.DEFERRED, _(
+                    "Highlight sync deferred — cloud copy changed. Will merge on next open."))
+                return
+            end
+            if not result.ok then
+                logger.warn("TagBankHighlightSync: close push upload failed")
+                finish_close_push(progress_token, SyncStatus.FAILED, _(
+                    "Highlight sync deferred — could not reach cloud server. Will retry on next open."))
+                return
+            end
+            local library_ok = true
+            if library_jobs and #library_jobs > 0 then
+                library_ok = CloudStorageCompat.pushFileQueue(
+                    snapshot.base_server, library_jobs)
+            end
+            if not library_ok then
+                logger.warn("TagBankHighlightSync: close library upload failed")
+                finish_close_push(progress_token, SyncStatus.FAILED, _(
+                    "Highlight sync deferred — could not reach cloud server. Will retry on next open."))
+                return
+            end
+            finish_close_push(progress_token, SyncStatus.SUCCESS)
+        end)
+        if not ok then
+            logger.err("TagBankHighlightSync: close push error:", err)
+            finish_close_push(progress_token, SyncStatus.FAILED, _(
+                "Highlight sync deferred — could not reach cloud server. Will retry on next open."))
         end
     end)
 end
@@ -190,7 +218,8 @@ function SyncBackground.schedule_auto_sync_retry(plugin, try_fn)
         if attempts < SyncBackground.RESUME_SYNC_MAX_ATTEMPTS then
             UIManager:scheduleIn(SyncBackground.RESUME_SYNC_RETRY_SEC, try_once)
         elseif plugin.settings then
-            plugin.settings.pending_sync = true
+            SyncStatus.apply(plugin.settings, SyncStatus.DEFERRED,
+                os.date("%Y-%m-%d %H:%M:%S"))
             plugin:saveSettings()
         end
     end

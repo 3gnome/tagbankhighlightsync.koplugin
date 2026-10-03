@@ -3,7 +3,7 @@
 ## GitHub About (one line)
 
 ```
-KOReader plugin: tag highlights, sync annotations via WebDAV/cloud, export Obsidian quote library. Optional AnkiKOAi companion for Anki cards.
+KOReader plugin: tag highlights, sync annotations via WebDAV/cloud, export Obsidian quote library. Optional AnkiKoFlash companion for Anki cards.
 ```
 
 ## Topics
@@ -15,7 +15,7 @@ KOReader plugin: tag highlights, sync annotations via WebDAV/cloud, export Obsid
 - [ ] `LOCAL_DEV.md` is **not** tracked (gitignored)
 - [ ] No `*.sdr/`, `alice.epub`, or `*.log` in commits
 - [ ] [LICENSE](../LICENSE) (AGPL-3.0) present
-- [ ] [README.md](../README.md) links to [AnkiKOAi](https://github.com/3gnome/AnkiKOAi.koplugin) where relevant
+- [ ] [README.md](../README.md) links to [AnkiKoFlash](https://github.com/3gnome/AnkiKoFlash.koplugin) where relevant
 
 ## Release
 
@@ -40,7 +40,7 @@ bash release.sh --notes-file docs/release-notes-v0.9.1.md
 
 ## Cross-links
 
-When docs mention AnkiKOAi, link:  
-`https://github.com/3gnome/AnkiKOAi.koplugin`
+When docs mention AnkiKoFlash, link:  
+`https://github.com/3gnome/AnkiKoFlash.koplugin`
 
-AnkiKOAi docs link back to this repo for Tag Bank / WebDAV / quote library.
+AnkiKoFlash docs link back to this repo for Tag Bank / WebDAV / quote library.

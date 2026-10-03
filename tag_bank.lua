@@ -89,6 +89,33 @@ function TagBank.has_folder_nodes(bank)
     return false
 end
 
+local function node_less(a, b)
+    local a_is_folder = a.kind == "folder"
+    local b_is_folder = b.kind == "folder"
+    if a_is_folder ~= b_is_folder then
+        return a_is_folder
+    end
+
+    local a_name = tostring(a.name or a.id or ""):lower()
+    local b_name = tostring(b.name or b.id or ""):lower()
+    if a_name ~= b_name then
+        return a_name < b_name
+    end
+    return tostring(a.id or "") < tostring(b.id or "")
+end
+
+--- Sort every sibling list in place: folders first, then case-insensitive
+--- display name, with the stable node id as the tie-breaker.
+function TagBank.sort_bank(bank)
+    for _, node in ipairs(bank or {}) do
+        if node.kind == "folder" and type(node.children) == "table" then
+            TagBank.sort_bank(node.children)
+        end
+    end
+    table.sort(bank, node_less)
+    return bank
+end
+
 function TagBank.migrate_layout_v2(settings)
     local bank = settings.tag_bank
     if type(bank) ~= "table" then
@@ -158,6 +185,11 @@ function TagBank.ensure_bank(settings)
     if (settings.tag_bank_layout_version or 0) < 3 then
         TagBank.migrate_layout_v3(settings)
         settings.tag_bank_layout_version = 3
+        did_migrate = true
+    end
+    TagBank.sort_bank(settings.tag_bank)
+    if (settings.tag_bank_layout_version or 0) < 4 then
+        settings.tag_bank_layout_version = 4
         did_migrate = true
     end
     return settings.tag_bank, did_migrate
@@ -351,6 +383,7 @@ function TagBank.add_tag(bank, path, name)
     local id = TagBank.unique_id(bank, name)
     local node = { kind = "tag", id = id, name = name }
     list[#list + 1] = node
+    TagBank.sort_bank(bank)
     return node
 end
 
@@ -362,6 +395,7 @@ function TagBank.add_folder(bank, path, name)
     local id = TagBank.unique_id(bank, name)
     local node = { kind = "folder", id = id, name = name, children = {} }
     list[#list + 1] = node
+    TagBank.sort_bank(bank)
     return node
 end
 
@@ -390,6 +424,7 @@ function TagBank.rename_node(bank, id, new_name)
         return false
     end
     node.name = new_name
+    TagBank.sort_bank(bank)
     return true
 end
 
@@ -426,6 +461,7 @@ function TagBank.move_node(bank, id, dest_path)
     end
     local moving = table.remove(src_list, src_index)
     dest_list[#dest_list + 1] = moving
+    TagBank.sort_bank(bank)
     return true
 end
 

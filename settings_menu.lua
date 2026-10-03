@@ -52,6 +52,10 @@ Folders organize tags in the highlight picker (e.g. Buddhism → aversion). Insi
 
 Add tag… opens a name prompt, then Make folder / Add to bank / Apply only. Add folder… creates structure at the current path. Hold a tag or folder to rename, move, or delete.
 
+Folders appear first and tags are alphabetized at every level.
+
+Suggest tags from this book compares the current visible paragraph with highlights you already tagged in this book. Suggested tags are preselected; recent tags remain available below them. Nothing changes until you tap Apply selected. This works locally without AI or a network connection.
+
 Tags sync in JSON and in the quote library Markdown files.]]),
 
     quote_library = [=[
@@ -96,9 +100,9 @@ Sync when I close a book writes your local highlights (including deletions) to t
 
 When quote library is ON, it also regenerates library Markdown (per-book file, quotes, tag indexes) and uploads changed files to library/ on WebDAV for Obsidian.
 
-It does not merge remote changes or reload the book on close — that keeps closing fast and avoids freezes. Full two-way JSON merge still runs when you open the book or press Sync now.
+It does not merge remote changes or reload the book on close — that keeps closing fast and avoids freezes. The upload stops after the first failure instead of retrying every library file. Full two-way JSON merge still runs when you open the book or press Sync now.
 
-If the cloud copy changed elsewhere, the upload may queue pending sync and merge on the next open.]]),
+If the cloud copy changed elsewhere, the upload may queue pending sync and merge on the next open. Cloud folder shows pending state and the last completed outcome.]]),
 }
 
 local function show_help(text)
@@ -266,7 +270,7 @@ function SettingsMenu.genQuoteLibraryMenu(plugin)
             save()
         end
     end
-    local anki_peer = PluginPeers.is_ankikooai_available(plugin.ui)
+    local anki_peer = PluginPeers.is_ankikoflash_available(plugin.ui)
     local orange_label = anki_peer
         and _("Exclude Anki pending highlights (orange)")
         or _("Exclude orange highlights")
@@ -275,7 +279,7 @@ function SettingsMenu.genQuoteLibraryMenu(plugin)
         or _("Exclude green highlights")
     local color_help_label = anki_peer and _("Anki highlight colors") or _("Highlight colors")
     local color_help_body = anki_peer and _([[
-Orange = AnkiKOAi pending queue. Green = sent wiki card kept on device.
+Orange = AnkiKoFlash pending queue. Green = sent card kept on device.
 
 These filters affect library Markdown only, not JSON sync.]]) or _([[
 These filters affect library Markdown only, not JSON sync.]])

@@ -11,6 +11,7 @@ local T = FFIUtil.template
 local _ = require("gettext")
 local TagBank = require("tag_bank")
 local Tags = require("tags")
+local Merge = require("merge")
 local FromHighlight = require("from_highlight")
 
 local TagMenu = {}
@@ -86,9 +87,16 @@ local function applied_subtitle(applied_ids, bank)
     return T(_("Applied: %1"), label)
 end
 
-local function persist_applied_tags(hl, ann, applied_ids, bank)
+function TagMenu.persist_applied_tags(hl, ann, applied_ids, bank)
     Tags.stash_expanded_tags_for_library(ann, bank)
     Tags.set_tags(ann, applied_ids)
+    ann.datetime_updated = os.date("%Y-%m-%d %H:%M:%S")
+    if hl and hl.ui and hl.ui.annotation then
+        hl.ui.annotation.annotations =
+            Merge.dedupe_annotations(hl.ui.annotation.annotations, function(item)
+                return item and item.text and item.pos0 ~= nil and item.pos1 ~= nil
+            end)
+    end
     if hl and hl.ui and hl.ui.doc_settings then
         hl.ui.doc_settings:saveSetting("annotations", hl.ui.annotation.annotations)
     end
@@ -398,7 +406,7 @@ function TagMenu.show_apply(plugin, hl, resolved_index, ann, opts)
     local menu
 
     local function save_now()
-        persist_applied_tags(hl, ann, collect_applied_ids(selected), bank)
+        TagMenu.persist_applied_tags(hl, ann, collect_applied_ids(selected), bank)
     end
 
     local function applied_label()

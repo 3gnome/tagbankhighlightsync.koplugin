@@ -5,31 +5,31 @@ return function(assert_eq, assert_true, PluginPeers)
         package.loaded["pluginloader"] = saved_loader
     end
 
-    assert_true(not PluginPeers.is_ankikooai_available(nil), "nil ui, no loader → false")
+    assert_true(not PluginPeers.is_ankikoflash_available(nil), "nil ui, no loader → false")
 
     package.loaded["pluginloader"] = {
         isPluginLoaded = function(_, name)
-            return name == "ankikooai"
+            return name == "ankikoflash"
         end,
     }
-    assert_true(PluginPeers.is_ankikooai_available(nil), "isPluginLoaded ankikooai")
+    assert_true(PluginPeers.is_ankikoflash_available(nil), "isPluginLoaded ankikoflash")
 
     package.loaded["pluginloader"] = {
         isPluginLoaded = function() return false end,
         getPluginInstance = function(_, name)
-            if name == "ankikooai" then return {} end
+            if name == "ankikoflash" then return {} end
         end,
     }
-    assert_true(PluginPeers.is_ankikooai_available(nil), "getPluginInstance ankikooai")
+    assert_true(PluginPeers.is_ankikoflash_available(nil), "getPluginInstance ankikoflash")
 
     package.loaded["pluginloader"] = {
         isPluginLoaded = function() return false end,
         getPluginInstance = function() return nil end,
     }
-    assert_true(PluginPeers.is_ankikooai_available({ ankikooai = {} }), "ui.ankikooai fallback")
+    assert_true(PluginPeers.is_ankikoflash_available({ ankikoflash = {} }), "ui.ankikoflash fallback")
 
     package.loaded["pluginloader"] = nil
-    assert_true(not PluginPeers.is_ankikooai_available({}), "empty ui, no loader → false")
+    assert_true(not PluginPeers.is_ankikoflash_available({}), "empty ui, no loader → false")
 
     restore_loader()
 end

@@ -2,8 +2,8 @@
 
 Run a small local WebDAV server on your PC so KOReader can sync highlight sidecars and read exported library files over home Wi‑Fi.
 
-**Full step-by-step guide (shared with AnkiKOAi ecosystem):**  
-[AnkiKOAi — WebDAV setup (Windows)](https://github.com/3gnome/AnkiKOAi.koplugin/blob/main/docs/webdav-setup-windows.md)
+**Full step-by-step guide (shared with AnkiKoFlash ecosystem):**  
+[AnkiKoFlash — WebDAV setup (Windows)](https://github.com/3gnome/AnkiKoFlash.koplugin/blob/main/docs/webdav-setup-windows.md)
 
 That guide covers:
 
@@ -26,4 +26,4 @@ After setup: tag highlights → **Sync now** → `*.sdr.json` and `library/` app
 ## Related
 
 - [Getting started](getting-started.md) — plugin install and first sync
-- [AnkiKOAi](https://github.com/3gnome/AnkiKOAi.koplugin) — optional Anki cards from highlights
+- [AnkiKoFlash](https://github.com/3gnome/AnkiKoFlash.koplugin) — optional Anki cards from highlights
