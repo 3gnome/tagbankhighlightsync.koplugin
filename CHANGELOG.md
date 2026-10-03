@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 (2026-10-03)
 
 ### Fixed (P0 — data loss / regressions)
 - AnkiKoFlash peer detection — correct `ankikoflash` plugin id (was retired `ankikooai`)
